@@ -1,5 +1,94 @@
 import nodemailer from 'nodemailer';
 
+const escapeXml = (str) => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+const buildWinOrderXml = (order) => {
+  const rawAddr = order?.address || '';
+  let street = rawAddr;
+  let houseNo = '';
+  let zip = '24837';
+  let city = 'Schleswig';
+
+  const parts = rawAddr.split(',').map(p => p.trim());
+  if (parts.length >= 2) {
+    const streetPart = parts[0];
+    const cityPart = parts[1];
+
+    const streetMatch = streetPart.match(/^(.*?)\s+([0-9]+[a-zA-Z0-9\-\/]*)$/);
+    if (streetMatch) {
+      street = streetMatch[1];
+      houseNo = streetMatch[2];
+    } else {
+      street = streetPart;
+    }
+
+    const cityMatch = cityPart.match(/([0-9]{5})\s+(.*)/);
+    if (cityMatch) {
+      zip = cityMatch[1];
+      city = cityMatch[2];
+    } else {
+      city = cityPart;
+    }
+  }
+
+  const nameParts = (order?.customer || 'Gast').trim().split(/\s+/);
+  const firstName = nameParts[0] || 'Gast';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
+  const articlesXml = (order?.items || []).map((item, idx) => {
+    const price = Number(item.price || 0).toFixed(2);
+    const count = parseInt(item.quantity || 1, 10);
+    const name = escapeXml(item.name || 'Artikel');
+    return `
+        <Article>
+          <ArticleNo>${idx + 1}</ArticleNo>
+          <ArticleName>${name}</ArticleName>
+          <Count>${count}</Count>
+          <Price>${price}</Price>
+        </Article>`;
+  }).join('');
+
+  const total = Number(order?.total || 0).toFixed(2);
+  const deliverType = rawAddr.toLowerCase().includes('abholung') ? 'Abholung' : 'Lieferung';
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<WinOrder>
+  <OrderList>
+    <Order>
+      <OrderID>${escapeXml(order?.id || Date.now())}</OrderID>
+      <Customer>
+        <DeliveryAddress>
+          <FirstName>${escapeXml(firstName)}</FirstName>
+          <LastName>${escapeXml(lastName)}</LastName>
+          <Street>${escapeXml(street)}</Street>
+          <HouseNo>${escapeXml(houseNo)}</HouseNo>
+          <Zip>${escapeXml(zip)}</Zip>
+          <City>${escapeXml(city)}</City>
+          <PhoneNo>${escapeXml(order?.phone || '')}</PhoneNo>
+          <Email>${escapeXml(order?.customerEmail || '')}</Email>
+        </DeliveryAddress>
+      </Customer>
+      <AddInfo>
+        <PaymentType>${escapeXml(order?.payment || 'Barzahlung')}</PaymentType>
+        <DeliverType>${deliverType}</DeliverType>
+        <Comment>Lieferzeit: ${escapeXml(order?.deliveryTime || 'Schnellstmöglich')}</Comment>
+        <Total>${total}</Total>
+      </AddInfo>
+      <ArticleList>${articlesXml}
+      </ArticleList>
+    </Order>
+  </OrderList>
+</WinOrder>`;
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -78,6 +167,8 @@ export default async function handler(req, res) {
 
     // 2. Admin Mail / Bestell-Benachrichtigung (order@pizzaking-schleswig.de)
     const adminEmail = process.env.ORDER_NOTIFICATIONS_EMAIL || process.env.RESTAURANT_EMAIL || 'order@pizzaking-schleswig.de';
+    const winOrderXml = buildWinOrderXml(order);
+
     await transporter.sendMail({
       from: fromSender,
       to: adminEmail,
@@ -96,7 +187,14 @@ export default async function handler(req, res) {
           </table>
           <h2>Gesamtsumme: ${(order?.total || 0).toFixed(2).replace('.', ',')} €</h2>
         </div>
-      `
+      `,
+      attachments: [
+        {
+          filename: `order_${order?.id || Date.now()}.xml`,
+          content: winOrderXml,
+          contentType: 'application/xml'
+        }
+      ]
     }).catch(err => console.error("Admin-Mail Fehler:", err));
 
     return res.status(200).json({ success: true, message: 'Order emails sent' });
