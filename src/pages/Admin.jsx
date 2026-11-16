@@ -113,7 +113,7 @@ export default function Admin() {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError('');
-    const res = login(loginEmail, loginPassword);
+    const res = await login(loginEmail, loginPassword);
     if (!res.success) {
       setLoginError(res.message);
     }
