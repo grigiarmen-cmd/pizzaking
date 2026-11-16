@@ -81,10 +81,10 @@ export default async function handler(req, res) {
     await transporter.sendMail({
       from: fromSender,
       to: adminEmail,
-      subject: `🚨 NEUE BESTELLUNG EINGEGANGEN! (${order?.id} - ${(order?.total || 0).toFixed(2).replace('.', ',')} €)`,
+      subject: `Neue Bestellung eingegangen (${order?.id} - ${(order?.total || 0).toFixed(2).replace('.', ',')} €)`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 25px; background: #111111; color: #ffffff; border-radius: 12px; border: 2px solid #22c55e;">
-          <h1 style="color: #22c55e; margin-top: 0;">🚨 NEUE BESTELLUNG EINGEGANGEN!</h1>
+          <h1 style="color: #22c55e; margin-top: 0;">Neue Bestellung eingegangen</h1>
           <p><strong>Kunde:</strong> ${order?.customer}</p>
           <p><strong>E-Mail:</strong> ${order?.customerEmail || toEmail || 'Keine'}</p>
           <p><strong>Telefon:</strong> ${order?.phone}</p>
