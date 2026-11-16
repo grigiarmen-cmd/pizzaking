@@ -9,8 +9,16 @@ export function useAdmin() {
 }
 
 export function AdminProvider({ children }) {
-  // Auth state - require password login on page reload / navigation
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Auth state - persisted so dashboard stays logged in and auto-polling stays alive
+  const [adminToken, setAdminToken] = useState(() => {
+    return localStorage.getItem('pk_admin_token') || null;
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const savedAuth = localStorage.getItem('pk_admin_auth');
+    const savedToken = localStorage.getItem('pk_admin_token');
+    return savedAuth === 'true' && Boolean(savedToken);
+  });
 
   // Language state: 'de', 'en', 'ru'
   const [language, setLanguage] = useState(() => {
@@ -54,7 +62,6 @@ export function AdminProvider({ children }) {
   });
 
   // Backend state
-  const [adminToken, setAdminToken] = useState(null);
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('pk_orders');
     if (saved) {
@@ -105,20 +112,44 @@ export function AdminProvider({ children }) {
       });
   }, []);
 
-  // 🔄 5-Second Auto Polling for Admin Orders, Users, Newsletter & Blacklist (active while admin is logged in)
+  // 🔄 Fast 2.5-Second Auto Polling & Cross-Tab Live Sync for Admin Orders, Users, Newsletter & Blacklist
   useEffect(() => {
-    if (!isAuthenticated) return;
+    // Cross-tab immediate sync: When another tab on the same device writes new orders
+    const handleStorageChange = (e) => {
+      if (e.key === 'pk_orders' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setOrders(parsed);
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // If not authenticated, still keep storage listener alive
+    if (!isAuthenticated) {
+      return () => window.removeEventListener('storage', handleStorageChange);
+    }
 
     const tokenHeader = adminToken && adminToken !== 'local-admin-token' 
       ? { 'Authorization': `Bearer ${adminToken}` } 
       : { 'Authorization': 'Bearer local-admin-token' };
 
     const pollAll = () => {
-      // 1. Orders
+      // 1. Orders Live-Sync
       fetch(`${API_URL}/orders`, { cache: 'no-store', headers: tokenHeader })
         .then(res => res.json())
         .then(data => {
-          if (Array.isArray(data)) setOrders(data);
+          if (Array.isArray(data)) {
+            setOrders(prev => {
+              // Deep compare length or ids to avoid unneeded state updates
+              if (prev.length === data.length && prev[0]?.id === data[0]?.id && prev[0]?.status === data[0]?.status) {
+                return prev;
+              }
+              return data;
+            });
+          }
         })
         .catch(err => console.error("Auto-Polling Fehler (Bestellungen):", err));
 
@@ -148,8 +179,11 @@ export function AdminProvider({ children }) {
     };
 
     pollAll();
-    const interval = setInterval(pollAll, 5000); // 5 seconds live polling
-    return () => clearInterval(interval);
+    const interval = setInterval(pollAll, 2500); // 2.5 seconds live polling
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [adminToken, isAuthenticated]);
 
   const seedMenu = async (menuData) => {
@@ -229,7 +263,9 @@ export function AdminProvider({ children }) {
       });
       const data = await res.json();
       
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.token) {
+        localStorage.setItem('pk_admin_token', data.token);
+        localStorage.setItem('pk_admin_auth', 'true');
         setAdminToken(data.token);
         setIsAuthenticated(true);
         return { success: true };
@@ -239,6 +275,8 @@ export function AdminProvider({ children }) {
     }
 
     if (envEmail && envPass && email.trim().toLowerCase() === envEmail && password === envPass) {
+      localStorage.setItem('pk_admin_token', 'local-admin-token');
+      localStorage.setItem('pk_admin_auth', 'true');
       setIsAuthenticated(true);
       setAdminToken('local-admin-token');
       return { success: true };
@@ -249,6 +287,7 @@ export function AdminProvider({ children }) {
 
   const verifyAdminLogin = (expectedCode, inputCode) => {
     if (expectedCode === inputCode.trim()) {
+      localStorage.setItem('pk_admin_auth', 'true');
       setIsAuthenticated(true);
       return { success: true };
     }
@@ -256,6 +295,8 @@ export function AdminProvider({ children }) {
   };
 
   const logout = () => {
+    localStorage.removeItem('pk_admin_token');
+    localStorage.removeItem('pk_admin_auth');
     setIsAuthenticated(false);
     setAdminToken(null);
   };
