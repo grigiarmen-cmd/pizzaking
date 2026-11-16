@@ -133,8 +133,32 @@ export function AdminProvider({ children }) {
     }
 
     const tokenHeader = adminToken && adminToken !== 'local-admin-token' 
-      ? { 'Authorization': `Bearer ${adminToken}` } 
-      : { 'Authorization': 'Bearer local-admin-token' };
+      ? { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' } 
+      : { 'Authorization': 'Bearer local-admin-token', 'Content-Type': 'application/json' };
+
+    // Automatische Migration: Lokale alte Bestellungen aus dem Browser einmalig in die Neon-Cloud synchronisieren
+    const syncLocalOrdersToDb = (serverOrders) => {
+      try {
+        const saved = localStorage.getItem('pk_orders');
+        if (saved) {
+          const localList = JSON.parse(saved);
+          if (Array.isArray(localList) && localList.length > 0) {
+            const serverIds = new Set((serverOrders || []).map(o => String(o.id)));
+            localList.forEach(localOrder => {
+              if (localOrder.id && !serverIds.has(String(localOrder.id))) {
+                fetch(`${API_URL}/orders`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(localOrder)
+                }).catch(err => console.warn('Alte Bestellung Sync fehlgeschlagen:', err));
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    };
+
+    let hasMigratedLocal = false;
 
     const pollAll = () => {
       // 1. Orders Live-Sync
@@ -142,8 +166,11 @@ export function AdminProvider({ children }) {
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
+            if (!hasMigratedLocal) {
+              hasMigratedLocal = true;
+              syncLocalOrdersToDb(data);
+            }
             setOrders(prev => {
-              // Deep compare length or ids to avoid unneeded state updates
               if (prev.length === data.length && prev[0]?.id === data[0]?.id && prev[0]?.status === data[0]?.status) {
                 return prev;
               }
