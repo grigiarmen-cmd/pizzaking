@@ -913,6 +913,23 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
   }
 });
 
+app.delete('/api/orders/bulk-cash', authenticateAdmin, async (req, res) => {
+  try {
+    const deleted = await prisma.order.deleteMany({
+      where: {
+        payment: {
+          contains: 'Bar',
+          mode: 'insensitive'
+        }
+      }
+    });
+    res.json({ success: true, count: deleted.count });
+  } catch (error) {
+    console.error('Error deleting cash orders:', error);
+    res.status(500).json({ error: 'Failed to delete cash orders' });
+  }
+});
+
 app.delete('/api/orders/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;

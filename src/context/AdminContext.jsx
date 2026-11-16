@@ -515,6 +515,23 @@ export function AdminProvider({ children }) {
     }
   };
 
+  const deleteCashOrders = async () => {
+    // Optimistic UI update
+    setOrders(prev => prev.filter(o => !(o.payment || '').toLowerCase().includes('bar')));
+    try {
+      const tokenHeader = adminToken && adminToken !== 'local-admin-token' 
+        ? { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' } 
+        : { 'Authorization': 'Bearer local-admin-token', 'Content-Type': 'application/json' };
+
+      await fetch(`${API_URL}/orders/bulk-cash`, {
+        method: 'DELETE',
+        headers: tokenHeader
+      });
+    } catch (err) {
+      console.error("Fehler beim Löschen der Barzahlungen:", err);
+    }
+  };
+
   const clearOrders = () => {
     setOrders([]);
   };
@@ -744,6 +761,7 @@ export function AdminProvider({ children }) {
       addOrder,
       updateOrderStatus,
       clearOrders,
+      deleteCashOrders,
       offers,
       addOffer,
       removeOffer,

@@ -46,6 +46,7 @@ export default function Admin() {
     logout, 
     orders, 
     updateOrderStatus, 
+    deleteCashOrders,
     offers, 
     removeOffer, 
     menu, 
@@ -343,7 +344,7 @@ export default function Admin() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* Payment Filter Dropdown */}
+                  {/* Payment Filter Dropdown & Bulk Delete Barzahlung */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.85rem', color: '#888' }}>Zahlungsart:</span>
                     <select 
@@ -356,6 +357,40 @@ export default function Admin() {
                       <option value="ec">💳 EC / Kartenzahlung</option>
                       <option value="paypal">💙 PayPal</option>
                     </select>
+
+                    {paymentFilter === 'bar' && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const cashCount = orders.filter(o => (o.payment || '').toLowerCase().includes('bar')).length;
+                          if (cashCount === 0) {
+                            alert('Keine Barzahlungen zum Löschen vorhanden.');
+                            return;
+                          }
+                          if (window.confirm(`Möchtest du wirklich ALLE ${cashCount} Barzahlungen unwiderruflich löschen?`)) {
+                            deleteCashOrders();
+                          }
+                        }}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          fontWeight: 'bold',
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Alle Barzahlungen aus der Datenbank und Liste löschen"
+                      >
+                        <Trash2 size={15} />
+                        Alle Barzahlungen löschen
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', gap: '6px' }}>
@@ -388,9 +423,17 @@ export default function Admin() {
                         return true;
                       })
                       .map(order => (
-                      <tr key={order.id}>
+                      <tr 
+                        key={order.id}
+                        onClick={() => setSelectedOrderDetails(order)}
+                        style={{ cursor: 'pointer', transition: 'background 0.2s' }}
+                        className="admin-order-row"
+                        title="Klicken, um Bestelldetails & Bon anzuzeigen"
+                      >
                         <td>
-                          <strong style={{ color: '#cfa670', display: 'block', fontSize: '1rem' }}>{order.id}</strong>
+                          <strong style={{ color: '#cfa670', display: 'block', fontSize: '1rem', textDecoration: 'underline', textUnderlineOffset: '4px' }}>
+                            #{order.id}
+                          </strong>
                           <span style={{ fontSize: '0.8rem', color: '#888' }}>{order.time} Uhr ({order.date})</span>
                         </td>
                         <td>
@@ -428,7 +471,7 @@ export default function Admin() {
                             {order.status === 'erledigt' && 'Geliefert'}
                           </span>
                         </td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             {order.status === 'eingegangen' && (
                               <button className="admin-btn" style={{ background: '#3b82f6', color: '#fff' }} onClick={() => updateOrderStatus(order.id, 'zubereitung')}>
@@ -1235,42 +1278,143 @@ export default function Admin() {
         </div>
       )}
 
-      {/* MODAL 3: ORDER DETAILS & RECEIPT PRINT */}
+      {/* MODAL 3: LUXURIOUS ORDER DETAILS (STORE CLOSED / ROYAL GOLD STYLE) */}
       {selectedOrderDetails && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#ffffff', color: '#000000', borderRadius: '16px', padding: '30px', width: '100%', maxWidth: '420px', fontFamily: 'monospace' }}>
-            <div style={{ textAlign: 'center', borderBottom: '2px dashed #000', paddingBottom: '15px', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.4rem' }}>PIZZA KING SCHLESWIG</h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>Domziegelhof 12-14 | Tel: 04621 - 30 11 11</p>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem' }}>Bestell-ID: <strong>{selectedOrderDetails.id}</strong></p>
-            </div>
-
-            <div style={{ marginBottom: '15px', fontSize: '0.85rem' }}>
-              <div>Kunde: <strong>{selectedOrderDetails.customer}</strong></div>
-              <div>Telefon: {selectedOrderDetails.phone}</div>
-              <div>Adresse: {selectedOrderDetails.address}</div>
-              <div>Zahlungsart: <strong>{selectedOrderDetails.payment}</strong></div>
-            </div>
-
-            <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '10px 0', marginBottom: '15px' }}>
-              {selectedOrderDetails.items.map((it, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
-                  <span>{typeof it === 'string' ? it : `${it.quantity || 1}x ${it.name}`}</span>
-                  <span>{typeof it === 'object' && it.price ? `${(it.price * (it.quantity || 1)).toFixed(2)} €` : ''}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 'bold', marginBottom: '20px' }}>
-              <span>GESAMTSUMME:</span>
-              <span>{(selectedOrderDetails.total || 0).toFixed(2)} €</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => window.print()} style={{ flex: 1, padding: '12px', background: '#000', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                🖨️ Bon Drucken
+        <div 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setSelectedOrderDetails(null)}
+        >
+          <div 
+            style={{ 
+              background: '#0d0e0d', 
+              border: '1px solid rgba(207, 166, 112, 0.4)', 
+              borderRadius: '24px', 
+              width: '95%', 
+              maxWidth: '520px', 
+              overflow: 'hidden', 
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9), 0 0 40px rgba(207, 166, 112, 0.15)', 
+              position: 'relative',
+              animation: 'fadeInScale 0.25s ease-out'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header / Brand Banner */}
+            <div style={{ background: 'linear-gradient(135deg, #181a18 0%, #0d0e0d 100%)', borderBottom: '1px solid rgba(207, 166, 112, 0.25)', padding: '24px 26px', position: 'relative' }}>
+              <button 
+                onClick={() => setSelectedOrderDetails(null)}
+                style={{ position: 'absolute', top: '18px', right: '18px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                <X size={20} />
               </button>
-              <button onClick={() => setSelectedOrderDetails(null)} style={{ padding: '12px 20px', background: '#ccc', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{ background: 'rgba(207,166,112,0.15)', color: '#cfa670', border: '1px solid rgba(207,166,112,0.3)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '1px' }}>
+                  BESTELLUNG #{selectedOrderDetails.id}
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#888' }}>
+                  {selectedOrderDetails.time} Uhr ({selectedOrderDetails.date})
+                </span>
+              </div>
+              
+              <h2 style={{ fontFamily: 'Cinzel, serif', color: '#cfa670', margin: '0 0 6px 0', fontSize: '1.6rem', letterSpacing: '1px' }}>
+                PIZZA KING DETAILS
+              </h2>
+              <div style={{ width: '45px', height: '2px', background: '#cfa670', borderRadius: '2px', marginBottom: '10px' }}></div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa' }}>
+                Domziegelhof 12-14, 24837 Schleswig
+              </p>
+            </div>
+
+            {/* Content Body */}
+            <div style={{ padding: '24px 26px', maxHeight: '65vh', overflowY: 'auto' }}>
+              
+              {/* Customer & Delivery Card */}
+              <div style={{ background: '#141514', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontSize: '0.9rem' }}>
+                  <div>
+                    <span style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'block' }}>Kunde</span>
+                    <strong style={{ color: '#fff', fontSize: '1.05rem' }}>{selectedOrderDetails.customer}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'block' }}>Telefon</span>
+                    <strong style={{ color: '#cfa670' }}>{selectedOrderDetails.phone || 'Keine Angabe'}</strong>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'block' }}>Adresse / Abholung</span>
+                    <strong style={{ color: '#ddd' }}>{selectedOrderDetails.address}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'block' }}>Zahlungsart</span>
+                    <span style={{ color: '#22c55e', fontWeight: 'bold' }}>{selectedOrderDetails.payment}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: '#888', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'block' }}>Lieferzeit</span>
+                    <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>{selectedOrderDetails.deliveryTime || 'Schnellstmöglich'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontFamily: 'Cinzel, serif', color: '#cfa670', fontSize: '1.1rem', margin: '0 0 12px 0', letterSpacing: '1px' }}>
+                  Bestellte Positionen
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(selectedOrderDetails.items || []).map((it, idx) => {
+                    const isStr = typeof it === 'string';
+                    const name = isStr ? it : it.name;
+                    const qty = isStr ? 1 : (it.quantity || 1);
+                    const singlePrice = isStr ? null : it.price;
+                    const totalPrice = singlePrice ? (singlePrice * qty).toFixed(2).replace('.', ',') + ' €' : '';
+
+                    return (
+                      <div 
+                        key={idx} 
+                        style={{ background: '#141514', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ background: 'rgba(207,166,112,0.2)', color: '#cfa670', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                            {qty}x
+                          </span>
+                          <span style={{ color: '#ffffff', fontWeight: '600', fontSize: '0.95rem' }}>
+                            {name}
+                          </span>
+                        </div>
+                        {totalPrice && (
+                          <span style={{ color: '#cfa670', fontWeight: 'bold', fontSize: '1rem' }}>
+                            {totalPrice}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Total Revenue Summary */}
+              <div style={{ background: 'rgba(207,166,112,0.1)', border: '1px solid rgba(207,166,112,0.3)', borderRadius: '14px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'Cinzel, serif', color: '#cfa670', fontSize: '1.1rem', letterSpacing: '1px' }}>
+                  GESAMTBETRAG
+                </span>
+                <span style={{ color: '#ffffff', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                  {(selectedOrderDetails.total || 0).toFixed(2).replace('.', ',')} €
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{ background: '#0a0b0a', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '18px 26px', display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => window.print()} 
+                style={{ flex: 1, padding: '14px', background: 'linear-gradient(135deg, #cfa670 0%, #b88645 100%)', color: '#000', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' }}
+              >
+                <Printer size={18} />
+                Bon Drucken
+              </button>
+              <button 
+                onClick={() => setSelectedOrderDetails(null)} 
+                style={{ padding: '14px 24px', background: '#1c1d1c', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}
+              >
                 Schließen
               </button>
             </div>
